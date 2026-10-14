@@ -16,11 +16,13 @@ you hear is the inputs through DigiCosm. NO gives the audio and the screen
 back. The sequencer keeps running, so DigiCosm follows its tempo and PLAY,
 STOP and TEMPO still work.
 
-**DigiCosm 0.1 is a pre-release.** It runs on a Digitone mk1, and was
-checked in digikit's emulator ([digiemu](https://github.com/irpina/digiemu))
+**DigiCosm 0.1.1 is a pre-release.** 0.1 runs on a Digitone mk1, and 0.1.1
+was checked in digikit's emulator ([digiemu](https://github.com/irpina/digiemu))
 on OS 1.43 and 1.44. Its source is also in elekloader
 ([mods/digicosm-dn1](https://github.com/irpina/elekloader/tree/main/mods/digicosm-dn1)),
-with the core it needs.
+with the core it needs. 0.1.1 fixes a mono input: with SETUP's INPUT on MONO,
+the dry and every engine come out of both sides, centred (0.1 kept them on
+the left, and some engines leaned to one side).
 
 ![DIGICOSM in core-dn1's Mod Menu](docs/mod-menu.png)
 ![Page 1, Effect: ACT, REP, SHP, FLT, MIX, TIME, SPC, LOOP](docs/page1-effect.png)
@@ -40,8 +42,8 @@ You need:
   0x44000000-0x45b00000 is outside every free area"*).
 - **This mod and its core,** from
   [this repository's releases](https://github.com/irpina/digicosm/releases):
-  `digicosm-0.1.elemod` and `core-dn1-3.2.elemod` for OS 1.43, or
-  `digicosm-0.1-os1.44.elemod` and `core-dn1-3.2-os1.44.elemod` for 1.44.
+  `digicosm-0.1.1.elemod` and `core-dn1-3.2.elemod` for OS 1.43, or
+  `digicosm-0.1.1-os1.44.elemod` and `core-dn1-3.2-os1.44.elemod` for 1.44.
   DigiCosm needs core-dn1 3.2: exclusive audio, the MIDI CC event, the
   tempo and the stock pages' fonts. No elekloader release has it yet:
   install it from here until one does.
@@ -56,7 +58,7 @@ sure the core ticked with it is **core 3.2**):
 
 ```bash
 python -m elekloader.patch --stock Digitone_and_Digitone_Keys_OS1.44.syx \
-    --mod core-dn1-3.2-os1.44.elemod --mod digicosm-0.1-os1.44.elemod \
+    --mod core-dn1-3.2-os1.44.elemod --mod digicosm-0.1.1-os1.44.elemod \
     --out Digitone_OS1.44-digicosm.syx --version DC01
 ```
 
@@ -193,8 +195,8 @@ core-dn1's render; the UI (`ui.c`) runs in the Digitone's UI task.
 With elekloader's SDK (from its main branch) and a stock OS file:
 
 ```bash
-python -m elekloader.sdk.build path/to/digicosm --stock Digitone_and_Digitone_Keys_OS1.43.syx   # digicosm-0.1.elemod
-python -m elekloader.sdk.build path/to/digicosm --stock Digitone_and_Digitone_Keys_OS1.44.syx   # digicosm-0.1-os1.44.elemod
+python -m elekloader.sdk.build path/to/digicosm --stock Digitone_and_Digitone_Keys_OS1.43.syx   # digicosm-0.1.1.elemod
+python -m elekloader.sdk.build path/to/digicosm --stock Digitone_and_Digitone_Keys_OS1.44.syx   # digicosm-0.1.1-os1.44.elemod
 ```
 
 It names no firmware address, so its 1.44 port is empty. It needs core-dn1
@@ -204,8 +206,9 @@ It names no firmware address, so its 1.44 port is empty. It needs core-dn1
 
 ## Checked
 
-It runs on a Digitone mk1, with core-dn1 3.2. In digikit's emulator, OS
-1.43 and 1.44, in detail:
+0.1 runs on a Digitone mk1, with core-dn1 3.2; 0.1.1 changes only the mono
+input, checked in the emulator. In digikit's emulator, OS 1.43 and 1.44, in
+detail:
 
 - **Owning the audio.** With the factory pattern playing, its FM is silent
   while DigiCosm is open and back at once after NO, also when PLAY was
@@ -228,6 +231,13 @@ It runs on a Digitone mk1, with core-dn1 3.2. In digikit's emulator, OS
   fifth gone), reverse, stop with its fade, and erase.
 - **Hold.** MOSAIC and HAZE keep sounding with the input silent while Hold
   is on, and fall silent once it is off.
+- **Mono input (0.1.1).** With SETUP's INPUT on MONO and white noise on the
+  left input only, the dry and the bypassed signal come out of both sides
+  at the same level (in 0.1 they stayed on the left), and every engine's
+  effect is centred: over 5 s, right against left between 0.87 and 1.07,
+  except BLOCKS and INTERRUPT, whose random placements average out over
+  longer. MOSAIC, TUNNEL, PATTERN and WARP used to lean to one side (down
+  to 0.62) and now spread their voices evenly.
 - **Presets.** A page saved as preset 5 from SETUP comes back exactly with
   FUNC + trig 5 after the engine, variation and knobs have changed; an
   empty preset changes nothing. The page and its presets fit in the

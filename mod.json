@@ -1,5 +1,5 @@
 {
- "id": "digicosm", "version": "0.1",
+ "id": "digicosm", "version": "0.1.1",
  "license": "GPL-2.0-or-later",
  "title": "DigiCosm", "category": "Effect", "author": "irpina",
  "description": "A Microcosm-style effects engine for the Digitone mk1's audio inputs: eleven engines (MOSAIC, SEQ, GLIDE, HAZE, TUNNEL, STRUM, BLOCKS, INTERRUPT, ARP, PATTERN, WARP) with four variations each, a 60-second looper with overdub and undo, Hold, Reverse, a resonant filter, pitch modulation and a reverb with four rooms, in time with the Digitone's tempo, and the Microcosm's MIDI CCs. DIGICOSM in core-dn1's Mod Menu (hold a track key) opens its page; while it is open it owns the audio engine (the synths are muted) and the screen, and NO gives both back. Needs core-dn1 3.2.",

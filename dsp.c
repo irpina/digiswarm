@@ -64,6 +64,13 @@ static void h_gain(struct head *h, s32 g, s32 pan)    /* pan 0 (left) .. 32767 (
     if (h->gr > 49151) h->gr = 49151;
 }
 
+/* n voices of the same level, evenly from 16384 - w to 16384 + w (one alone in the middle), so a mono input
+ * stays in the middle of the image */
+static s32 pan_lin(int i, int n, s32 w)
+{
+    return n < 2 ? 16384 : 16384 - w + (2 * w * i) / (n - 1);
+}
+
 static void h_init(struct head *h, s32 g, s32 pan, int win, int tag)
 {
     h->win = dc_win + 256 * win;
@@ -361,7 +368,7 @@ static void eng_mosaic(int tick)
         struct head *h = h_get();
         if (!h)
             break;
-        h_loop(h, recent(L), L, rates[var][i], gnorm[n], 16384 + ((i & 1) ? 5000 : -5000) * (1 + i / 2),
+        h_loop(h, recent(L), L, rates[var][i], gnorm[n], pan_lin(i, n, 8000),
                shp, -1, 1);
         h->rel = (h->len / (u32)n) * (u32)i;    /* the same loop, offset: a rhythm of its own */
         h->rel &= ~0xfffu;
@@ -510,7 +517,7 @@ static void eng_tunnel(int tick, int onset)
             if (!h)
                 break;
             h_loop(h, recent(len + 480 * (u32)i), len, (var == 1 && i == 1) ? 2048 : 4096,
-                   var == 2 ? gnorm[n] / 2 : gnorm[n], 16384 + (i - 1) * 7000, shp, -1, 5);  /* C rings */
+                   var == 2 ? gnorm[n] / 2 : gnorm[n], pan_lin(i, n, 7000), shp, -1, 5);  /* C rings */
             if (var == 1) {
                 h->f = 1;                       /* swept below */
                 h->q = dc_svf_q[20];
@@ -692,8 +699,15 @@ static void eng_pattern(void)
         gk = shp == 0 ? g : shp == 1 ? 18000 : shp == 2 ? 6000 + 2400 * k : eng.tap_g[k];
         if (tap_d[k] >= dly_fill)
             gk = 0;
-        tap_gl[k] = (k & 1) ? gk / 3 : gk;
-        tap_gr[k] = (k & 1) ? gk : gk / 3;
+        if ((ntaps & 1) && k == ntaps - 1) {        /* an odd one out: in the middle */
+            tap_gl[k] = tap_gr[k] = (gk * 3) >> 2;
+        } else if (!((k ^ (k >> 1)) & 1)) {         /* L R R L L R R L: neither side gets the louder taps */
+            tap_gl[k] = gk;
+            tap_gr[k] = gk / 3;
+        } else {
+            tap_gl[k] = gk / 3;
+            tap_gr[k] = gk;
+        }
         g = (g * 26000) >> 15;
     }
     tap_fb = (s32)rep * 30000 / 127;
@@ -702,17 +716,19 @@ static void eng_pattern(void)
 static void eng_warp(int tick)
 {
     static const s16 rr[4] = { 8192, 2048, 6144, 3072 };
+    static u8 side;                             /* each trigger mirrors the last, so the image stays centred */
     int n = 1 + ((act * 6) >> 7), k;
     s32 g = 26000;
     if (!tick)
         return;
+    side ^= 1;
     for (k = 0; k < n; k++) {
         struct head *h = h_get();
         u32 d = (Pe / 2) * (u32)(k + 1);
         if (!h)
             break;
         h_shot(h, recent(d + Pe), var == 2 ? rr[k & 3] : (var == 3 && (k & 1)) ? 8192 : 4096,
-               (var == 3 && (k & 1)) ? Pe / 2 : Pe, g, (k & 1) ? 24000 : 8768, shp, 10);
+               (var == 3 && (k & 1)) ? Pe / 2 : Pe, g, ((k + side) & 1) ? 24000 : 8768, shp, 10);
         if (var == 0) {                         /* an envelope filter: the input's level opens it */
             h->f = dc_svf_f[clampu(30 + (u32)env_slow / 64, 30, 120)];
             h->q = dc_svf_q[50];
@@ -1034,14 +1050,14 @@ void dcosm_render(int32_t *out, const int32_t *in)
     static s32 x[2 * N], w[2 * N];
     u32 t0 = DTCN0;
     s32 g = dc_in_gain[dcosm.shift[S_GAIN]], dg, wg, pkl = 0, pkr = 0;
-    int i, tick, onset, pre = dcosm.cfg[G_PRE], byp = dcosm.bypass, e = dcosm.engine;
+    int i, tick, onset, pre = dcosm.cfg[G_PRE], byp = dcosm.bypass, e = dcosm.engine, mono = dcosm.cfg[G_MONO];
 
     act = dcosm.knob[K_ACT], rep = dcosm.knob[K_REP], shp = dcosm.knob[K_SHP] >> 5, var = dcosm.var;
 
     /* the input: gain, mono, its peak */
     for (i = 0; i < N; i++) {
         s32 l = ((in[2 * i] >> 16) * g) >> 12, r;
-        r = dcosm.cfg[G_MONO] ? l : ((in[2 * i + 1] >> 16) * g) >> 12;
+        r = mono ? l : ((in[2 * i + 1] >> 16) * g) >> 12;
         x[2 * i] = sat16(l);
         x[2 * i + 1] = sat16(r);
         l = l < 0 ? -l : l;
@@ -1132,7 +1148,8 @@ void dcosm_render(int32_t *out, const int32_t *in)
     filter_render(w);
     space_render(w, !byp);
 
-    /* Mix: the dry input at 20 bits against the effects; INTERRUPT ducks the dry */
+    /* Mix: the dry input at 20 bits against the effects; INTERRUPT ducks the dry. With INPUT MONO the left
+     * input is the dry on both sides, as it is the effects' input */
     dg = dc_mix_dry[dcosm.knob[K_MIX]];
     wg = (dc_mix_wet[dcosm.knob[K_MIX]] * dc_level[dcosm.shift[S_FXVOL]]) >> 14;
     if (byp)
@@ -1143,7 +1160,7 @@ void dcosm_render(int32_t *out, const int32_t *in)
         duck -= N;
     }
     for (i = 0; i < 2 * N; i++) {
-        s32 d = in[i] >> 12, v, wv = w[i];
+        s32 d = in[mono ? i & ~1 : i] >> 12, v, wv = w[i];
         if (pre)
             d += lp[i] << 4;
         if (wv > 131071) wv = 131071;
