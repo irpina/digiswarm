@@ -16,7 +16,6 @@
 #define ONS     8
 
 struct dc_state dswarm;
-struct core_audio_owner dswarm_owner = { 0, dswarm_render, CORE_AUDIO_MUTE_VOICES };
 const char *const dswarm_engine_names[E_COUNT] = { "SHARDS", "SEQ", "GLIDE", "MIST", "DRONE", "RAKE",
                                                   "CHOPS", "STUTTER", "ARP", "PATTERN", "WARP" };
 

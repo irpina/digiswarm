@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/* DigiSwarm: an effects engine for the Digitone mk1's audio inputs, on core-dn1 3.2's
- * exclusive audio (core_audio). Shared by dsp.c (the render, interrupt level) and ui.c (the UI task). */
+/* DigiSwarm: an effects engine for the Digitone mk1's audio inputs, an effect on fxkit (exclusive
+ * audio, fxkit's mixer, LFOs and p-locks). Shared by dsp.c (the render, interrupt level) and ui.c (the UI task). */
 #ifndef DSWARM_H
 #define DSWARM_H
 
 #include <stdint.h>
 #include "digitone-mk1/core3.h"
+#include "digitone-mk1/fxkit.h"
 
 typedef int32_t s32;
 typedef uint32_t u32;
@@ -40,7 +41,7 @@ enum { L_EMPTY, L_REC, L_PLAY, L_DUB, L_STOP };                             /* t
 enum { C_NONE, C_T1, C_STOP, C_UNDO, C_ERASE, C_BURST_DOWN, C_BURST_UP };   /* looper commands */
 enum { G_MONO, G_PRE, G_ONLY, G_QUANT, G_BURST, G_HOLDMOM, G_ORDER, G_MIDI, G_COUNT }; /* SETUP's rows */
 
-/* What the UI sets and the render reads, and what the render reports. */
+/* What the render reads (the controls: fxkit's values each block, dswarm_values) and what it reports. */
 struct dc_state {
     volatile u8 knob[8], shift[8];
     volatile u8 engine, var, reverse, hold, bypass;
@@ -56,7 +57,16 @@ struct dc_state {
     volatile u16 heads;                 /* heads playing */
 };
 extern struct dc_state dswarm;
-extern struct core_audio_owner dswarm_owner;
+extern const struct fx_effect dswarm_effect;
+
+/* The controls' slots (fxkit's): EFFECT on page 1, SHIFT on page 2, the engine, its variation, Reverse and Hold
+ * as settings; BYPASS is the mixer's BYP */
+#define DC_S_KNOB(i)    (FX_S_P1 + (i))
+#define DC_S_SHIFT(i)   (FX_S_P2 + (i))
+#define DC_S_ENGINE     FX_S_SET(0)
+#define DC_S_VAR        FX_S_SET(1)
+#define DC_S_REVERSE    FX_S_SET(2)
+#define DC_S_HOLD       FX_S_SET(3)
 
 void dswarm_render(int32_t *out, const int32_t *in);
 void dswarm_dsp_reset(void);
