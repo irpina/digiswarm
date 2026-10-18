@@ -1,18 +1,18 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/* DigiCosm's UI: its Mod Menu entry, its screen, its keys and knobs, its project data. While it is open it
- * owns the output (dcosm_owner.on) and the screen; NO gives both back.
+/* DigiSwarm's UI: its Mod Menu entry, its screen, its keys and knobs, its project data. While it is open it
+ * owns the output (dswarm_owner.on) and the screen; NO gives both back.
  *
  *   three pages, as the Digitone's own (LEFT, RIGHT or PAGE moves between them):
  *     1 EFFECT  ACT REP SHP FLT / MIX TIME SPC LOOP        pushing a knob: its default
  *     2 SHIFT   GAIN MDEP MRAT RESO / FXVL LSPD VERB FADE  (also FUNC + a knob on page 1)
  *     3 LOOPER  HOLD REV BYP - / LOOP STOP UNDO CLR        turn A-C for off/on, push to toggle or act
  *   trig keys 1-11   the engines; 12 HOLD; 13-16 the variation, A-D
- *   T1 the looper: record, play, overdub (held: undo);  T2 stop (held: erase), as the Microcosm's footswitches
+ *   T1 the looper: record, play, overdub (held: undo);  T2 stop (held: erase), as two footswitches
  *   YES SETUP, NO back (from a page: close);  PLAY, STOP, RECORD, TEMPO and LEVEL/DATA stay stock
  *   presets: in SETUP a trig key saves the page as that preset (1-16); FUNC + a trig key recalls one
- *   MIDI: the Microcosm's CCs, on the auto channel (or any, in SETUP), while the page is open */
+ *   MIDI: its CCs (the map below), on the auto channel (or any, in SETUP), while the page is open */
 #pragma GCC optimize ("no-tree-loop-distribute-patterns")
-#include "dcosm.h"
+#include "dswarm.h"
 
 #define KEY_FUNC    1
 #define KEY_TEMPO   9
@@ -51,8 +51,8 @@ static const char *const shapes[4] = { "FLAT", "SWEL", "PERC", "ARCH" };
 static const char *const times[6] = { "BAR", "1/2", "1/4", "1/8", "1/16", "1/32" };
 static const char *const speeds[5] = { "1/4X", "1/2X", "1X", "2X", "4X" };
 static const char *const rooms[4] = { "ROOM", "DARK", "HALL", "AMBI" };
-static const char *const eng_title[E_COUNT] = { "Mosaic", "Seq", "Glide", "Haze", "Tunnel", "Strum",
-                                                "Blocks", "Interrupt", "Arp", "Pattern", "Warp" };
+static const char *const eng_title[E_COUNT] = { "Shards", "Seq", "Glide", "Mist", "Drone", "Rake",
+                                                "Chops", "Stutter", "Arp", "Pattern", "Warp" };
 static const char *const cfg_lbl[G_COUNT] = { "INPUT", "LOOP ROUTE", "LOOPER ONLY", "QUANTIZE", "BURST",
                                               "HOLD", "LOOP ORDER", "MIDI CC" };
 static const char *const cfg_val[G_COUNT][2] = { { "STEREO", "MONO" }, { "POST-FX", "PRE-FX" }, { "OFF", "ON" },
@@ -84,16 +84,16 @@ static void defaults(void)
 {
     int i;
     for (i = 0; i < 8; i++) {
-        dcosm.knob[i] = knob_def[i];
-        dcosm.shift[i] = shift_def[i];
+        dswarm.knob[i] = knob_def[i];
+        dswarm.shift[i] = shift_def[i];
     }
     for (i = 0; i < G_COUNT; i++)
-        dcosm.cfg[i] = 0;
-    dcosm.engine = E_MOSAIC;
-    dcosm.var = 0;
+        dswarm.cfg[i] = 0;
+    dswarm.engine = E_SHARDS;
+    dswarm.var = 0;
 }
 
-static void dcosm_loaded(int found)
+static void dswarm_loaded(int found)
 {
     int i, j;
     if (!found || save.ver != SAVE_VER || save.engine >= E_COUNT || save.var > 3) {
@@ -103,33 +103,33 @@ static void dcosm_loaded(int found)
                 save.preset[i][j] = 0;
     } else {
         for (i = 0; i < 8; i++) {
-            dcosm.knob[i] = save.knob[i] & 127;
-            dcosm.shift[i] = save.shift[i] & 127;
+            dswarm.knob[i] = save.knob[i] & 127;
+            dswarm.shift[i] = save.shift[i] & 127;
         }
         for (i = 0; i < G_COUNT; i++)
-            dcosm.cfg[i] = (save.cfg >> i) & 1;
-        dcosm.engine = save.engine;
-        dcosm.var = save.var;
+            dswarm.cfg[i] = (save.cfg >> i) & 1;
+        dswarm.engine = save.engine;
+        dswarm.var = save.var;
     }
     ui_inited = 1;
 }
 
-const struct core_projdata dcosm_projdata = { 0x4443534Du /* "DCSM" */, sizeof(struct dc_save), &save,
-                                              dcosm_loaded };
+const struct core_projdata dswarm_projdata = { 0x4443534Du /* "DCSM" */, sizeof(struct dc_save), &save,
+                                              dswarm_loaded };
 
 static void keep_save(void)                 /* the page into the project's copy (the presets are there) */
 {
     int i;
     u8 cfg = 0;
     save.ver = SAVE_VER;
-    save.engine = dcosm.engine;
-    save.var = dcosm.var;
+    save.engine = dswarm.engine;
+    save.var = dswarm.var;
     for (i = 0; i < 8; i++) {
-        save.knob[i] = dcosm.knob[i];
-        save.shift[i] = dcosm.shift[i];
+        save.knob[i] = dswarm.knob[i];
+        save.shift[i] = dswarm.shift[i];
     }
     for (i = 0; i < G_COUNT; i++)
-        cfg |= (u8)((dcosm.cfg[i] & 1) << i);
+        cfg |= (u8)((dswarm.cfg[i] & 1) << i);
     save.cfg = cfg;
 }
 
@@ -139,10 +139,10 @@ static void preset_save(int n)
     u32 hi = 0, lo = 0;
     int i;
     for (i = 0; i < 4; i++)
-        hi = (hi << 6) | (u32)(dcosm.knob[i] >> 1);
+        hi = (hi << 6) | (u32)(dswarm.knob[i] >> 1);
     for (i = 4; i < 8; i++)
-        lo = (lo << 6) | (u32)(dcosm.knob[i] >> 1);
-    p[0] = (u8)(dcosm.engine | dcosm.var << 4 | 0x80);
+        lo = (lo << 6) | (u32)(dswarm.knob[i] >> 1);
+    p[0] = (u8)(dswarm.engine | dswarm.var << 4 | 0x80);
     p[1] = (u8)(hi >> 16), p[2] = (u8)(hi >> 8), p[3] = (u8)hi;
     p[4] = (u8)(lo >> 16), p[5] = (u8)(lo >> 8), p[6] = (u8)lo;
 }
@@ -158,14 +158,14 @@ static int preset_recall(int n)             /* -> 0 when the slot is empty */
     lo = (u32)p[4] << 16 | (u32)p[5] << 8 | p[6];
     for (i = 3; i >= 0; i--, hi >>= 6) {
         v = hi & 63;
-        dcosm.knob[i] = (u8)(v == 63 ? 127 : v << 1);    /* 64 stays 64, 127 stays 127 */
+        dswarm.knob[i] = (u8)(v == 63 ? 127 : v << 1);    /* 64 stays 64, 127 stays 127 */
     }
     for (i = 7; i >= 4; i--, lo >>= 6) {
         v = lo & 63;
-        dcosm.knob[i] = (u8)(v == 63 ? 127 : v << 1);    /* 64 stays 64, 127 stays 127 */
+        dswarm.knob[i] = (u8)(v == 63 ? 127 : v << 1);    /* 64 stays 64, 127 stays 127 */
     }
-    dcosm.engine = (u8)(p[0] & 15);
-    dcosm.var = (u8)((p[0] >> 4) & 3);
+    dswarm.engine = (u8)(p[0] & 15);
+    dswarm.var = (u8)((p[0] >> 4) & 3);
     return 1;
 }
 
@@ -177,7 +177,7 @@ static void message(int kind, int n)
 }
 
 /* ---- opening and closing -------------------------------------------------------------------------- */
-static void dcosm_open(void *brain, void *ev, int track)
+static void dswarm_open(void *brain, void *ev, int track)
 {
     (void)brain, (void)ev, (void)track;
     ui_open = 1;
@@ -188,19 +188,19 @@ static void dcosm_open(void *brain, void *ev, int track)
         clear_at = DC_BULK;                 /* the first time: clear what the render reads */
 }
 
-static void dcosm_close(void)
+static void dswarm_close(void)
 {
     ui_open = 0;
-    dcosm_owner.on = 0;                     /* the stock audio, from the next block */
-    dcosm.hold = 0;
+    dswarm_owner.on = 0;                     /* the stock audio, from the next block */
+    dswarm.hold = 0;
 }
 
-/* The Mod Menu's DIGICOSM, with its icon: an orb. */
-static const u16 dcosm_icon[16] = {
+/* The Mod Menu's DIGISWARM, with its icon: an orb. */
+static const u16 dswarm_icon[16] = {
     0x07e0, 0x1818, 0x2004, 0x43c2, 0x4c32, 0x9009, 0x93c9, 0xa5a5,
     0xa5a5, 0x93c9, 0x9009, 0x4c32, 0x43c2, 0x2004, 0x1818, 0x07e0
 };
-const struct core_menu_item dcosm_menu = { "DIGICOSM", dcosm_open, CORE_MENU_ICON, dcosm_icon };
+const struct core_menu_item dswarm_menu = { "DIGISWARM", dswarm_open, CORE_MENU_ICON, dswarm_icon };
 
 /* ---- keys ------------------------------------------------------------------------------------------- */
 static void set_knob(int i, int func, s32 v)
@@ -208,9 +208,9 @@ static void set_knob(int i, int func, s32 v)
     if (v < 0) v = 0;
     if (v > 127) v = 127;
     if (func)
-        dcosm.shift[i] = (u8)v;
+        dswarm.shift[i] = (u8)v;
     else
-        dcosm.knob[i] = (u8)v;
+        dswarm.knob[i] = (u8)v;
 }
 
 static void flash(int pg, int i)              /* the knob's value in the title bar, a second */
@@ -222,12 +222,12 @@ static void flash(int pg, int i)              /* the knob's value in the title b
 
 static void hold_key(void)
 {
-    dcosm.hold = dcosm.cfg[G_HOLDMOM] ? 1 : !dcosm.hold;
+    dswarm.hold = dswarm.cfg[G_HOLDMOM] ? 1 : !dswarm.hold;
 }
 
 static void loop_key(void)                   /* T1, and LOOP on page 3: record, play, overdub */
 {
-    dcosm.lcmd = dcosm.cfg[G_BURST] ? C_BURST_DOWN : C_T1;
+    dswarm.lcmd = dswarm.cfg[G_BURST] ? C_BURST_DOWN : C_T1;
 }
 
 static int page_now(void)                    /* FUNC held shows page 2 */
@@ -244,21 +244,21 @@ static void push(int i)                      /* an encoder pushed */
     } else if (i == 0) {
         hold_key();
     } else if (i == 1) {
-        dcosm.reverse = !dcosm.reverse;
+        dswarm.reverse = !dswarm.reverse;
     } else if (i == 2) {
-        dcosm.bypass = !dcosm.bypass;
+        dswarm.bypass = !dswarm.bypass;
     } else if (i == 4) {
         loop_key();
     } else if (i == 5) {
-        dcosm.lcmd = C_STOP;
-    } else if (i == 6 && !dcosm.cfg[G_BURST]) {
-        dcosm.lcmd = C_UNDO;
+        dswarm.lcmd = C_STOP;
+    } else if (i == 6 && !dswarm.cfg[G_BURST]) {
+        dswarm.lcmd = C_UNDO;
     } else if (i == 7) {
-        dcosm.lcmd = C_ERASE;
+        dswarm.lcmd = C_ERASE;
     }
 }
 
-int dcosm_key(void *brain, void *ev)
+int dswarm_key(void *brain, void *ev)
 {
     u32 key = EV_KEY(ev), fl = EV_FLAGS(ev);
     int press = (fl & 1) && !(fl & 8), released = (fl & 0x10) != 0, looper = !ui_setup && page_now() == 2;
@@ -275,10 +275,10 @@ int dcosm_key(void *brain, void *ev)
     if (key == KEY_PLAY || key == KEY_STOP || key == KEY_TEMPO || key == KEY_RECORD)
         return 0;                           /* the sequencer and its tempo stay the Digitone's */
     if (released) {
-        if ((key == KEY_STEP1 + 11 || (looper && key == KEY_PUSH_A)) && dcosm.cfg[G_HOLDMOM])
-            dcosm.hold = 0;
-        if ((key == KEY_T1 || (looper && key == KEY_PUSH_A + 4)) && dcosm.cfg[G_BURST])
-            dcosm.lcmd = C_BURST_UP;
+        if ((key == KEY_STEP1 + 11 || (looper && key == KEY_PUSH_A)) && dswarm.cfg[G_HOLDMOM])
+            dswarm.hold = 0;
+        if ((key == KEY_T1 || (looper && key == KEY_PUSH_A + 4)) && dswarm.cfg[G_BURST])
+            dswarm.lcmd = C_BURST_UP;
         return 1;
     }
     if (!press)
@@ -292,28 +292,28 @@ int dcosm_key(void *brain, void *ev)
             message(preset_recall(n) ? 2 : 3, n);
         }
     } else if (key >= KEY_STEP1 && key < KEY_STEP1 + E_COUNT) {
-        dcosm.engine = (u8)(key - KEY_STEP1);
+        dswarm.engine = (u8)(key - KEY_STEP1);
     } else if (key == KEY_STEP1 + 11) {
         hold_key();
     } else if (key >= KEY_STEP1 + 12 && key <= KEY_STEP1 + 15) {
-        dcosm.var = (u8)(key - KEY_STEP1 - 12);
+        dswarm.var = (u8)(key - KEY_STEP1 - 12);
     } else if (key == KEY_T1) {
         loop_key();
     } else if (key == KEY_T1 + 1) {
-        dcosm.lcmd = C_STOP;
+        dswarm.lcmd = C_STOP;
     } else if (key == KEY_YES) {
         ui_setup = !ui_setup;
     } else if (key == KEY_NO) {
         if (ui_setup)
             ui_setup = 0;
         else
-            dcosm_close();
+            dswarm_close();
     } else if (ui_setup && (key == KEY_UP || key == KEY_DOWN)) {
         ui_row = (u8)((ui_row + (key == KEY_UP ? G_COUNT - 1 : 1)) % G_COUNT);
     } else if (ui_setup && (key == KEY_LEFT || key == KEY_RIGHT)) {
-        dcosm.cfg[ui_row] = !dcosm.cfg[ui_row];
+        dswarm.cfg[ui_row] = !dswarm.cfg[ui_row];
         if (ui_row == G_HOLDMOM)
-            dcosm.hold = 0;
+            dswarm.hold = 0;
     } else if (key == KEY_LEFT || key == KEY_RIGHT || key == KEY_PAGE) {
         ui_pg = (u8)((ui_pg + (key == KEY_LEFT ? NPAGE - 1 : 1)) % NPAGE);
         ui_flash_ticks = 0;
@@ -324,19 +324,19 @@ int dcosm_key(void *brain, void *ev)
 }
 
 /* core-dn1's ev_hold, a track key held on its own: while open, T1 undoes the overdub, T2 erases. */
-int dcosm_hold(void *brain, void *ev, int track)
+int dswarm_hold(void *brain, void *ev, int track)
 {
     (void)brain, (void)ev;
     if (!ui_open)
         return 0;
-    if (track == 0 && !dcosm.cfg[G_BURST])
-        dcosm.lcmd = C_UNDO;
+    if (track == 0 && !dswarm.cfg[G_BURST])
+        dswarm.lcmd = C_UNDO;
     else if (track == 1)
-        dcosm.lcmd = C_ERASE;
+        dswarm.lcmd = C_ERASE;
     return 1;
 }
 
-int dcosm_enc(void *brain, void *ev)
+int dswarm_enc(void *brain, void *ev)
 {
     u32 e = EV_KEY(ev);
     s32 d;
@@ -354,24 +354,24 @@ int dcosm_enc(void *brain, void *ev)
         return 1;
     pg = page_now();
     if (pg < 2) {
-        set_knob(i, pg, (pg ? dcosm.shift[i] : dcosm.knob[i]) + d);
+        set_knob(i, pg, (pg ? dswarm.shift[i] : dswarm.knob[i]) + d);
         flash(pg, i);
-    } else if (i == 0 && !dcosm.cfg[G_HOLDMOM]) {  /* page 3: right on, left off */
-        dcosm.hold = (u8)(d > 0);
+    } else if (i == 0 && !dswarm.cfg[G_HOLDMOM]) {  /* page 3: right on, left off */
+        dswarm.hold = (u8)(d > 0);
     } else if (i == 1) {
-        dcosm.reverse = (u8)(d > 0);
+        dswarm.reverse = (u8)(d > 0);
     } else if (i == 2) {
-        dcosm.bypass = (u8)(d > 0);
+        dswarm.bypass = (u8)(d > 0);
     }
     return 1;
 }
 
-/* ---- MIDI: the Microcosm's CC map (core-dn1 3.2's ev_midi_cc, the MIDI task) -------------------------------
- * While the page is open, the CCs below are DigiCosm's when they come on the auto channel (SETUP's MIDI CC:
+/* ---- MIDI: the CC map (core-dn1 3.2's ev_midi_cc, the MIDI task) -------------------------------------------
+ * While the page is open, the CCs below are DigiSwarm's when they come on the auto channel (SETUP's MIDI CC:
  * ANY CH, on a track's channel too): the Digitone does not apply them. Every other CC, and every CC while
  * the page is closed, goes on to the Digitone. A switch is on from 64; a looper CC acts from 64. CC 5 and
- * CC 18 take the Microcosm's steps, 0-5: 1/4, 1/2, TAP, 2x, 4x, 8x (and anything above as 8x). Its six
- * subdivisions are DigiCosm's six TIME steps, a bar down to 1/32; its loop speeds are DigiCosm's five, 8x
+ * CC 18 take steps, 0-5: 1/4, 1/2, TAP, 2x, 4x, 8x (and anything above as 8x). The six
+ * subdivisions are DigiSwarm's six TIME steps, a bar down to 1/32; the loop speeds are DigiSwarm's five, 8x
  * as 4x. */
 static const u8 cc_knob[8] = { K_ACT, K_SHP, K_FLT, K_MIX, K_TIME, K_REP, K_SPC, K_LOOP };          /* CC 6-13 */
 static const u8 cc_shift[8] = { S_MRATE, S_RESO, S_FXVOL, S_LSPEED, S_LSPEED, S_MDEP, S_VERB, S_FADE }; /* 14-21 */
@@ -379,47 +379,47 @@ static const u8 cc_cfg[4] = { G_PRE, G_ONLY, G_BURST, G_QUANT };                
 static const u8 cc_time[6] = { 10, 32, 53, 74, 96, 117 };       /* CC 5: the middle of each TIME step */
 static const u8 cc_lspeed[6] = { 12, 38, 64, 89, 115, 115 };    /* CC 18: of each LSPD step */
 
-int dcosm_cc(int track, int cc, int value, int flags)
+int dswarm_cc(int track, int cc, int value, int flags)
 {
-    int on = value >= 64, s = dcosm.lstate;
+    int on = value >= 64, s = dswarm.lstate;
     (void)track;
-    if (!ui_open || !ui_ready || (!(flags & CORE_MIDI_CC_AUTO) && !dcosm.cfg[G_MIDI]))
+    if (!ui_open || !ui_ready || (!(flags & CORE_MIDI_CC_AUTO) && !dswarm.cfg[G_MIDI]))
         return 0;
     if (value < 0 || value > 127)
         return 0;
     if (cc == 5) {                              /* Subdivision, stepped */
-        dcosm.knob[K_TIME] = cc_time[value < 5 ? value : 5];
+        dswarm.knob[K_TIME] = cc_time[value < 5 ? value : 5];
     } else if (cc == 18) {                      /* Loop Speed, stepped */
-        dcosm.shift[S_LSPEED] = cc_lspeed[value < 5 ? value : 5];
+        dswarm.shift[S_LSPEED] = cc_lspeed[value < 5 ? value : 5];
     } else if (cc >= 6 && cc <= 13) {
-        dcosm.knob[cc_knob[cc - 6]] = (u8)value;
+        dswarm.knob[cc_knob[cc - 6]] = (u8)value;
     } else if (cc >= 14 && cc <= 21) {          /* 17 is Loop Speed, 0-127 */
-        dcosm.shift[cc_shift[cc - 14]] = (u8)value;
+        dswarm.shift[cc_shift[cc - 14]] = (u8)value;
     } else if (cc == 23 || cc == 47) {          /* Reverse */
-        dcosm.reverse = (u8)on;
+        dswarm.reverse = (u8)on;
     } else if (cc >= 24 && cc <= 27) {          /* the looper's settings */
-        dcosm.cfg[cc_cfg[cc - 24]] = (u8)on;
+        dswarm.cfg[cc_cfg[cc - 24]] = (u8)on;
     } else if (cc >= 28 && cc <= 35 && cc != 32 && cc != 33) {
         if (!on)
             return 1;
         if (cc == 28)                           /* Record: start; close; or a new take */
-            dcosm.lcmd = s == L_EMPTY || s == L_REC ? C_T1 : C_BURST_DOWN;
+            dswarm.lcmd = s == L_EMPTY || s == L_REC ? C_T1 : C_BURST_DOWN;
         else if (cc == 29)                      /* Play */
-            dcosm.lcmd = s == L_REC ? C_BURST_UP : s == L_STOP || s == L_DUB ? C_T1 : C_NONE;
+            dswarm.lcmd = s == L_REC ? C_BURST_UP : s == L_STOP || s == L_DUB ? C_T1 : C_NONE;
         else if (cc == 30)                      /* Overdub, on and off */
-            dcosm.lcmd = s == L_PLAY || s == L_DUB ? C_T1 : C_NONE;
+            dswarm.lcmd = s == L_PLAY || s == L_DUB ? C_T1 : C_NONE;
         else if (cc == 31)
-            dcosm.lcmd = C_STOP;
+            dswarm.lcmd = C_STOP;
         else if (cc == 34)
-            dcosm.lcmd = C_ERASE;
+            dswarm.lcmd = C_ERASE;
         else
-            dcosm.lcmd = C_UNDO;
+            dswarm.lcmd = C_UNDO;
     } else if (cc == 48) {                      /* Hold */
-        dcosm.hold = (u8)on;
+        dswarm.hold = (u8)on;
     } else if (cc == 102) {                     /* Bypass: below 64 bypassed */
-        dcosm.bypass = (u8)!on;
+        dswarm.bypass = (u8)!on;
     } else if (cc == 22 || cc == 45 || cc == 46 || cc == 93) {
-        /* the Microcosm's looper on/off, copy preset, save preset and tap tempo: nothing to do here (the
+        /* looper on/off, copy preset, save preset and tap tempo: nothing to do here (the
          * looper is always on, presets are saved from SETUP, the tempo is the Digitone's), but taken, so
          * the Digitone does not apply them to the active track meanwhile */
     } else {
@@ -429,7 +429,7 @@ int dcosm_cc(int track, int cc, int value, int flags)
 }
 
 /* ---- the UI task: clearing, the owner, redraws ---------------------------------------------------------- */
-void dcosm_tick(void *ctrl)
+void dswarm_tick(void *ctrl)
 {
     if (!ui_inited) {                       /* no project load reached us */
         defaults();
@@ -443,27 +443,27 @@ void dcosm_tick(void *ctrl)
             *p++ = 0;
         clear_at = (u32)end >= DC_CLEAR_END ? 0 : (u32)end;
         if (!clear_at) {
-            dcosm_dsp_reset();
-            dcosm.bvalid = 1;
+            dswarm_dsp_reset();
+            dswarm.bvalid = 1;
             ui_ready = 1;
         }
     }
-    if (dcosm.lclear_len) {                 /* undo: the overdub layer, 512 KB a tick */
-        u32 *p = (u32 *)(DC_LOOPB) + bclear_at, *end = (u32 *)(DC_LOOPB) + dcosm.lclear_len;
+    if (dswarm.lclear_len) {                 /* undo: the overdub layer, 512 KB a tick */
+        u32 *p = (u32 *)(DC_LOOPB) + bclear_at, *end = (u32 *)(DC_LOOPB) + dswarm.lclear_len;
         if (end > p + 131072)
             end = p + 131072;
         while (p < end)
             *p++ = 0;
         bclear_at = (u32)(end - (u32 *)DC_LOOPB);
-        if (bclear_at >= dcosm.lclear_len) {
+        if (bclear_at >= dswarm.lclear_len) {
             bclear_at = 0;
-            dcosm.lclear_len = 0;
-            dcosm.bvalid = 1;
+            dswarm.lclear_len = 0;
+            dswarm.bvalid = 1;
         }
     }
-    dcosm_owner.on = ui_open && ui_ready;
-    dcosm.meter[0] = (u16)(dcosm.meter[0] - (dcosm.meter[0] >> 3));
-    dcosm.meter[1] = (u16)(dcosm.meter[1] - (dcosm.meter[1] >> 3));
+    dswarm_owner.on = ui_open && ui_ready;
+    dswarm.meter[0] = (u16)(dswarm.meter[0] - (dswarm.meter[0] >> 3));
+    dswarm.meter[1] = (u16)(dswarm.meter[1] - (dswarm.meter[1] >> 3));
     keep_save();
     if (ui_msg_ticks)
         ui_msg_ticks--;
@@ -476,7 +476,7 @@ void dcosm_tick(void *ctrl)
 /* ---- the screen: 128 x 64, y = 0 the bottom row ------------------------------------------------------ */
 static void value_text(void *bmp, const void *font, int x, int y, int i, int func)
 {
-    int v = func ? dcosm.shift[i] : dcosm.knob[i];
+    int v = func ? dswarm.shift[i] : dswarm.knob[i];
     if (!func) {
         if (i == K_SHP)
             TEXTF(bmp, font, x, y, -1, "%s", shapes[v >> 5]);
@@ -667,35 +667,35 @@ static void title_bar(void *bmp, int pg)
     } else if (ui_setup) {
         TEXTF(bmp, FONT_TTL, 19, 56, -1, "Setup (trig: save)");
     } else {
-        TEXTF(bmp, FONT_TTL, 19, 56, -1, "%s %c (%d/%d)", eng_title[dcosm.engine], 'A' + dcosm.var, pg + 1, NPAGE);
+        TEXTF(bmp, FONT_TTL, 19, 56, -1, "%s %c (%d/%d)", eng_title[dswarm.engine], 'A' + dswarm.var, pg + 1, NPAGE);
     }
-    TEXTF(bmp, FONT_TTL, 110, 56, -1, "C%d", dcosm.cpu / 10);
+    TEXTF(bmp, FONT_TTL, 110, 56, -1, "C%d", dswarm.cpu / 10);
     FILLRECT(bmp, 17, 54, 127, 63, -1);
     corners(bmp, 17, 54, 127, 63, 0);
 }
 
 static void left_column(void *bmp)
 {
-    int s = dcosm.lstate, k, l, r, secs;
+    int s = dswarm.lstate, k, l, r, secs;
     rframe(bmp, 0, 27, 14, 50);             /* the looper, as the stock's SYN box */
     loop_icon(bmp, 7, 44, s);
     if (s != L_EMPTY) {
-        secs = (int)((s == L_REC ? dcosm.lrec : dcosm.llen) / 48000);
+        secs = (int)((s == L_REC ? dswarm.lrec : dswarm.llen) / 48000);
         TEXTF(bmp, FONT5, secs >= 10 ? 3 : 5, 35, -1, "%d", secs);
     }
-    if (dcosm.hold)
+    if (dswarm.hold)
         small_text(bmp, 3, 31, "H");
-    if (dcosm.reverse)
+    if (dswarm.reverse)
         small_text(bmp, 7, 31, "R");
-    if (dcosm.bypass)
+    if (dswarm.bypass)
         small_text(bmp, 11, 31, "B");
     for (k = 0; k < 5; k++) {               /* the input's meter, as LEV: L and R */
         FILLRECT(bmp, 0, 7 + 4 * k, 1, 7 + 4 * k, 1);
         FILLRECT(bmp, 13, 7 + 4 * k, 14, 7 + 4 * k, 1);
     }
     rframe(bmp, 4, 7, 10, 23);
-    l = (dcosm.meter[0] * 13) / 32767;
-    r = (dcosm.meter[1] * 13) / 32767;
+    l = (dswarm.meter[0] * 13) / 32767;
+    r = (dswarm.meter[1] * 13) / 32767;
     if (l)
         FILLRECT(bmp, 6, 9, 6, 8 + l, 1);
     if (r)
@@ -708,7 +708,7 @@ static void control(void *bmp, int pg, int i)
     int cx = col_x[i & 3], r = i >> 2, cy = ROW_Y(r), v;
     const char *lbl;
     if (pg == 0) {
-        v = dcosm.knob[i];
+        v = dswarm.knob[i];
         lbl = knob_lbl[i];
         if (i == K_SHP) {
             box(bmp, cx, cy, 0, 0);
@@ -719,7 +719,7 @@ static void control(void *bmp, int pg, int i)
             knob(bmp, cx, cy, v, 0);
         }
     } else if (pg == 1) {
-        v = dcosm.shift[i];
+        v = dswarm.shift[i];
         lbl = shift_lbl[i];
         if (i == S_LSPEED)
             box(bmp, cx, cy, speeds[(v * 5) >> 7], 0);
@@ -730,11 +730,11 @@ static void control(void *bmp, int pg, int i)
     } else {
         lbl = sw_lbl[i];
         if (i < 3) {
-            v = i == 0 ? dcosm.hold : i == 1 ? dcosm.reverse : dcosm.bypass;
+            v = i == 0 ? dswarm.hold : i == 1 ? dswarm.reverse : dswarm.bypass;
             box(bmp, cx, cy, v ? "ON" : "OFF", v);
         } else if (i == 4) {
             box(bmp, cx, cy, 0, 0);
-            loop_icon(bmp, cx, cy, dcosm.lstate);
+            loop_icon(bmp, cx, cy, dswarm.lstate);
         } else if (i == 5) {
             box(bmp, cx, cy, 0, 0);
             FILLRECT(bmp, cx - 3, cy - 3, cx + 3, cy + 3, 1);
@@ -759,13 +759,13 @@ static void draw_setup(void *bmp)
     for (i = 0; i < G_COUNT; i++) {
         int y = 46 - 6 * i;
         TEXTF(bmp, FONT5, 3, y, -1, "%s", cfg_lbl[i]);
-        TEXTF(bmp, FONT5, 76, y, -1, "%s", cfg_val[i][dcosm.cfg[i] & 1]);
+        TEXTF(bmp, FONT5, 76, y, -1, "%s", cfg_val[i][dswarm.cfg[i] & 1]);
         if (i == ui_row)
             FILLRECT(bmp, 1, y - 1, 126, y + 4, -1);
     }
 }
 
-void dcosm_draw(void *bmp, void *ctrl)
+void dswarm_draw(void *bmp, void *ctrl)
 {
     int i, pg = page_now();
     (void)ctrl;
@@ -773,7 +773,7 @@ void dcosm_draw(void *bmp, void *ctrl)
         return;
     FILLRECT(bmp, 0, 0, 127, 63, 0);
     if (!ui_ready) {
-        TEXTF(bmp, FONT5, 30, 30, -1, "DIGICOSM...");
+        TEXTF(bmp, FONT5, 30, 30, -1, "DIGISWARM...");
         return;
     }
     title_bar(bmp, pg);

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/* DigiCosm's render: core-dn1 3.2 calls dcosm_render at interrupt level for every block it owns the
+/* DigiSwarm's render: core-dn1 3.2 calls dswarm_render at interrupt level for every block it owns the
  * output (32 frames, 667 us). The chain:
  *   input (gain, mono) -> the history ring -> the engine's heads and taps -> the looper -> pitch
  *   modulation -> the filter -> Space (reverb) -> Mix with the dry input -> the output.
@@ -7,7 +7,7 @@
  * Every engine is a scheduler at block rate that starts "heads": interpolated, windowed readers of the
  * history, as one-shot grains or as loops; PATTERN reads taps off a delay line of its own. */
 #pragma GCC optimize ("no-tree-loop-distribute-patterns")
-#include "dcosm.h"
+#include "dswarm.h"
 #include "tables.h"
 
 #define N       32
@@ -15,10 +15,10 @@
 #define DTCN0   (*(volatile u32 *)0xFC07000Cu)  /* DMA timer 0's counter: the bus clock */
 #define ONS     8
 
-struct dc_state dcosm;
-struct core_audio_owner dcosm_owner = { 0, dcosm_render, CORE_AUDIO_MUTE_VOICES };
-const char *const dcosm_engine_names[E_COUNT] = { "MOSAIC", "SEQ", "GLIDE", "HAZE", "TUNNEL", "STRUM",
-                                                  "BLOCKS", "INTERRUPT", "ARP", "PATTERN", "WARP" };
+struct dc_state dswarm;
+struct core_audio_owner dswarm_owner = { 0, dswarm_render, CORE_AUDIO_MUTE_VOICES };
+const char *const dswarm_engine_names[E_COUNT] = { "SHARDS", "SEQ", "GLIDE", "MIST", "DRONE", "RAKE",
+                                                  "CHOPS", "STUTTER", "ARP", "PATTERN", "WARP" };
 
 static inline s32 sat16(s32 v) { return v > 32767 ? 32767 : v < -32768 ? -32768 : v; }
 static inline s32 clamp17(s32 v) { return v > 65535 ? 65535 : v < -65535 ? -65535 : v; }
@@ -87,7 +87,7 @@ static void h_init(struct head *h, s32 g, s32 pan, int win, int tag)
 /* A grain: life frames of the history from src on (at rate; backwards from its far end when reversed). */
 static void h_shot(struct head *h, u32 src, s32 rate, u32 life, s32 g, s32 pan, int win, int tag)
 {
-    s32 inc = dcosm.reverse ? -rate : rate;
+    s32 inc = dswarm.reverse ? -rate : rate;
     u32 span = (life * (u32)(rate >> 4)) >> 8;
     if (life < 64)
         life = 64;
@@ -107,7 +107,7 @@ static u32 loop_dph(s32 rate, u32 len)          /* the window's step: a cycle a 
 /* A loop: len frames of the history from start on, played over and over (cyc times, < 0 for ever). */
 static void h_loop(struct head *h, u32 start, u32 len, s32 rate, s32 g, s32 pan, int win, int cyc, int tag)
 {
-    s32 inc = dcosm.reverse ? -rate : rate;
+    s32 inc = dswarm.reverse ? -rate : rate;
     if (len < 64)
         len = 64;
     if (len > DC_HIST_FR / 2)
@@ -247,7 +247,7 @@ static void heads_render(s32 *w)
         }
         h->ph = ph;
     }
-    dcosm.heads = (u16)n;
+    dswarm.heads = (u16)n;
 }
 
 /* ---- the block's clock and the input's onsets ------------------------------------------------- */
@@ -270,7 +270,7 @@ static int clock_block(void)
     int tick;
     if (tempo < 2400 || tempo > 48000)          /* 20-400 BPM */
         tempo = 14400;
-    pu = sub_units[(dcosm.knob[K_TIME] * 6) >> 7];
+    pu = sub_units[(dswarm.knob[K_TIME] * 6) >> 7];
     P = (16u * pu) / tempo;
     Pe = P > 96000 ? 96000 : P;
     qfr = (16u * 21600000u) / tempo;
@@ -293,7 +293,7 @@ static int onset_block(void)
     env_slow += (peak - env_slow) >> 5;
     if (refr) {
         refr--;
-    } else if (peak > 900 && peak > 2 * env_slow + 200 && !dcosm.hold) {
+    } else if (peak > 900 && peak > 2 * env_slow + 200 && !dswarm.hold) {
         u32 at = (hw - N - 96) & DC_HMASK, last = ons_pos[(ons_n - 1) % ONS];
         if (ons_n) {
             u32 d = (at - last) & DC_HMASK;
@@ -318,8 +318,8 @@ static struct {
     u8 started, var;
     s16 tap_g[8];
 } eng;
-static u32 haze_acc, haze_ptr;
-static s32 duck;                                /* INTERRUPT: frames the dry stays ducked */
+static u32 mist_acc, mist_ptr;
+static s32 duck;                                /* STUTTER: frames the dry stays ducked */
 static int act, rep, shp, var;
 static u32 tap_d[8];
 static s32 tap_gl[8], tap_gr[8], tap_fb;
@@ -339,7 +339,7 @@ static u32 recent(u32 back)                     /* the history's frame back fram
 
 static u32 clampu(u32 v, u32 lo, u32 hi) { return v < lo ? lo : v > hi ? hi : v; }
 
-static int new_loop_due(void)                   /* MOSAIC, GLIDE: time to take new loops? */
+static int new_loop_due(void)                   /* SHARDS, GLIDE: time to take new loops? */
 {
     u32 every = rep >= 120 ? 0 : 1 + (u32)(rep >> 4);
     if (!eng.started) {
@@ -354,7 +354,7 @@ static int new_loop_due(void)                   /* MOSAIC, GLIDE: time to take n
     return 0;
 }
 
-static void eng_mosaic(int tick)
+static void eng_shards(int tick)
 {
     static const s16 rates[4][4] = { { 4096, 8192, 4096, 8192 }, { 4096, 2048, 4096, 2048 },
                                      { 8192, 8192, 8192, 8192 }, { 2048, 4096, 8192, 16384 } };
@@ -463,25 +463,25 @@ static void eng_glide(int tick)
     }
 }
 
-static void eng_haze(void)
+static void eng_mist(void)
 {
     u32 dens = 6 + (u32)act * 90 / 127, life = 1440 + (u32)rep * 180, over;
     int spawns = 0;
-    haze_acc += dens * N;
-    haze_ptr += N / 4;                          /* A: a reader at a quarter of the input's speed */
-    if (((hw - haze_ptr) & DC_HMASK) > 96000)
-        haze_ptr = hw - 9600;
+    mist_acc += dens * N;
+    mist_ptr += N / 4;                          /* A: a reader at a quarter of the input's speed */
+    if (((hw - mist_ptr) & DC_HMASK) > 96000)
+        mist_ptr = hw - 9600;
     over = dens * life / 48000;
-    while (haze_acc >= 48000 && spawns < 4) {
+    while (mist_acc >= 48000 && spawns < 4) {
         struct head *h = h_get();
         s32 rate = 4096;
         u32 src;
-        haze_acc -= 48000;
+        mist_acc -= 48000;
         if (!h)
             break;
         spawns++;
         if (var == 0) {
-            src = (haze_ptr - rnd_n(2400)) & DC_HMASK;
+            src = (mist_ptr - rnd_n(2400)) & DC_HMASK;
             rate += (s32)rnd_n(41) - 20;
         } else {
             src = recent(life * 4 + rnd_n(var == 1 ? 60000 : 36000));
@@ -492,11 +492,11 @@ static void eng_haze(void)
         }
         h_shot(h, src, rate, life, gnorm[over > 16 ? 16 : over < 1 ? 1 : over], 4096 + (s32)rnd_n(24576), shp, 4);
     }
-    if (haze_acc > 4 * 48000)
-        haze_acc = 0;
+    if (mist_acc > 4 * 48000)
+        mist_acc = 0;
 }
 
-static void eng_tunnel(int tick, int onset)
+static void eng_drone(int tick, int onset)
 {
     u32 ml = clampu(Pe / 8, 480, 7200);
     s32 dec, lfo;
@@ -549,7 +549,7 @@ static void eng_tunnel(int tick, int onset)
     }
 }
 
-static void eng_strum(int tick, int onset)
+static void eng_rake(int tick, int onset)
 {
     int i, copies;
     u32 o;
@@ -605,7 +605,7 @@ static void block_shot(u32 src, u32 life, int sub)
     }
 }
 
-static void eng_blocks(int tick, int onset)
+static void eng_chops(int tick, int onset)
 {
     u32 life = Pe / (1 + (((u32)act * 3) >> 7));
     if (eng.sub_left && ++eng.cnt >= eng.sub_every) {      /* A: a burst's repeats */
@@ -625,7 +625,7 @@ static void eng_blocks(int tick, int onset)
     }
 }
 
-static void eng_interrupt(int tick)
+static void eng_stutter(int tick)
 {
     if (eng.sub_left && ++eng.cnt >= eng.sub_every) {
         static const s16 rr[2] = { 2048, 8192 };
@@ -773,75 +773,75 @@ static s32 lp[2 * N];
 
 static void loop_close(int next)
 {
-    u32 len = dcosm.lrec;
-    if (dcosm.cfg[G_QUANT] && qfr && len >= qfr)
+    u32 len = dswarm.lrec;
+    if (dswarm.cfg[G_QUANT] && qfr && len >= qfr)
         len = len / qfr * qfr;
     if (len < 4800)
-        len = 4800 < dcosm.lrec ? 4800 : dcosm.lrec;
+        len = 4800 < dswarm.lrec ? 4800 : dswarm.lrec;
     if (len < 64) {
-        dcosm.lstate = L_EMPTY;
+        dswarm.lstate = L_EMPTY;
         return;
     }
-    dcosm.llen = len;
-    lpos = dcosm.reverse ? (len << 10) - 1 : 0;
+    dswarm.llen = len;
+    lpos = dswarm.reverse ? (len << 10) - 1 : 0;
     lfade = lfade_to = 32767;
-    dcosm.lstate = (u8)next;
+    dswarm.lstate = (u8)next;
 }
 
 static void loop_fade_to(s32 to)
 {
-    u32 frames = (u32)dcosm.shift[S_FADE] * 3000;
+    u32 frames = (u32)dswarm.shift[S_FADE] * 3000;
     lfade_to = to;
     lfade_step = frames ? (s32)(32767u * N / frames) + 1 : 16384;
 }
 
 static void loop_command(void)
 {
-    int c = dcosm.lcmd, s = dcosm.lstate;
-    dcosm.lcmd = C_NONE;
+    int c = dswarm.lcmd, s = dswarm.lstate;
+    dswarm.lcmd = C_NONE;
     switch (c) {
     case C_T1:
         if (s == L_EMPTY) {
-            dcosm.lrec = 0;
-            dcosm.lstate = L_REC;
+            dswarm.lrec = 0;
+            dswarm.lstate = L_REC;
         } else if (s == L_REC) {
-            loop_close(dcosm.cfg[G_ORDER] ? L_DUB : L_PLAY);
+            loop_close(dswarm.cfg[G_ORDER] ? L_DUB : L_PLAY);
         } else if (s == L_PLAY) {
-            if (dcosm.bvalid && !dcosm.cfg[G_BURST])
-                dcosm.lstate = L_DUB;
+            if (dswarm.bvalid && !dswarm.cfg[G_BURST])
+                dswarm.lstate = L_DUB;
         } else if (s == L_DUB) {
-            dcosm.lstate = L_PLAY;
+            dswarm.lstate = L_PLAY;
         } else if (s == L_STOP) {
             lpos = 0;
             lfade = 0;
             loop_fade_to(32767);
-            dcosm.lstate = L_PLAY;
+            dswarm.lstate = L_PLAY;
         }
         break;
     case C_STOP:
         if (s == L_REC)
             loop_close(L_STOP);
         else if (s == L_PLAY || s == L_DUB) {
-            dcosm.lstate = L_STOP;
+            dswarm.lstate = L_STOP;
             loop_fade_to(0);
         }
         break;
     case C_UNDO:
-        if (dcosm.llen) {
-            dcosm.bvalid = 0;
-            dcosm.lclear_len = dcosm.llen;
+        if (dswarm.llen) {
+            dswarm.bvalid = 0;
+            dswarm.lclear_len = dswarm.llen;
             if (s == L_DUB)
-                dcosm.lstate = L_PLAY;
+                dswarm.lstate = L_PLAY;
         }
         break;
     case C_ERASE:
-        dcosm.lstate = L_EMPTY;
-        dcosm.llen = 0;
+        dswarm.lstate = L_EMPTY;
+        dswarm.llen = 0;
         break;
     case C_BURST_DOWN:
-        dcosm.lrec = 0;
-        dcosm.llen = 0;
-        dcosm.lstate = L_REC;
+        dswarm.lrec = 0;
+        dswarm.llen = 0;
+        dswarm.lstate = L_REC;
         break;
     case C_BURST_UP:
         if (s == L_REC)
@@ -855,23 +855,23 @@ static void loop_play(void)
 {
     static const s16 speeds[5] = { 256, 512, 1024, 2048, 4096 };
     const s16 *A = DC_LOOPA, *B = DC_LOOPB;
-    s32 lev = dc_level[dcosm.knob[K_LOOP]], sp = speeds[(dcosm.shift[S_LSPEED] * 5) >> 7], g;
-    u32 L = dcosm.llen << 10;
-    int i, s = dcosm.lstate, b = dcosm.bvalid;
-    if (dcosm.reverse)
+    s32 lev = dc_level[dswarm.knob[K_LOOP]], sp = speeds[(dswarm.shift[S_LSPEED] * 5) >> 7], g;
+    u32 L = dswarm.llen << 10;
+    int i, s = dswarm.lstate, b = dswarm.bvalid;
+    if (dswarm.reverse)
         sp = -sp;
     if (lfade < lfade_to)
         lfade = lfade + lfade_step > lfade_to ? lfade_to : lfade + lfade_step;
     else if (lfade > lfade_to)
         lfade = lfade - lfade_step < lfade_to ? lfade_to : lfade - lfade_step;
-    if (!dcosm.llen || s == L_EMPTY || s == L_REC || (s == L_STOP && lfade == 0)) {
+    if (!dswarm.llen || s == L_EMPTY || s == L_REC || (s == L_STOP && lfade == 0)) {
         for (i = 0; i < 2 * N; i++)
             lp[i] = 0;
         return;
     }
     g = (lev * lfade) >> 15;                    /* Q14 */
     for (i = 0; i < N; i++) {
-        u32 a = lpos >> 10, nb = a + 1 < dcosm.llen ? a + 1 : 0;
+        u32 a = lpos >> 10, nb = a + 1 < dswarm.llen ? a + 1 : 0;
         s32 fr = (lpos & 1023) << 2;
         s32 l0 = A[2 * a], r0 = A[2 * a + 1], l1 = A[2 * nb], r1 = A[2 * nb + 1];
         if (b) {
@@ -890,18 +890,18 @@ static void loop_play(void)
 static void loop_write(const s32 *src)
 {
     s16 *A = DC_LOOPA, *B = DC_LOOPB;
-    int i, s = dcosm.lstate;
+    int i, s = dswarm.lstate;
     if (s == L_REC) {
-        u32 r = dcosm.lrec;
+        u32 r = dswarm.lrec;
         for (i = 0; i < N && r < DC_LOOP_FR; i++, r++) {
             A[2 * r] = (s16)sat16(src[2 * i]);
             A[2 * r + 1] = (s16)sat16(src[2 * i + 1]);
             B[2 * r] = B[2 * r + 1] = 0;
         }
-        dcosm.lrec = r;
+        dswarm.lrec = r;
         if (r >= DC_LOOP_FR)
             loop_close(L_PLAY);
-    } else if (s == L_DUB && dcosm.bvalid) {
+    } else if (s == L_DUB && dswarm.bvalid) {
         for (i = 0; i < N; i++) {
             u32 a = lidx[i];
             B[2 * a] = (s16)sat16(B[2 * a] + src[2 * i]);
@@ -915,7 +915,7 @@ static u32 mod_w, mod_lfo;
 static void mod_render(s32 *w)
 {
     s16 *M = DC_MODL;
-    int depth = dcosm.shift[S_MDEP], rate = dcosm.shift[S_MRATE], i;
+    int depth = dswarm.shift[S_MDEP], rate = dswarm.shift[S_MRATE], i;
     u32 hz100 = 5 + (u32)rate * (u32)rate * 800 / 16129;
     u32 d;
     mod_lfo += hz100 * 28633u;
@@ -938,7 +938,7 @@ static void mod_render(s32 *w)
 static s32 flt_l[2], flt_b[2];
 static void filter_render(s32 *w)
 {
-    int k = dcosm.knob[K_FLT], i;
+    int k = dswarm.knob[K_FLT], i;
     s32 f, q, l0 = flt_l[0], b0 = flt_b[0], l1 = flt_l[1], b1 = flt_b[1];
     if (k == 127)
         return;
@@ -948,7 +948,7 @@ static void filter_render(s32 *w)
         return;
     }
     f = dc_svf_f[k];
-    q = dc_svf_q[dcosm.shift[S_RESO]];
+    q = dc_svf_q[dswarm.shift[S_RESO]];
     for (i = 0; i < N; i++) {
         s32 hh = clamp17(w[2 * i] - l0 - ((q * b0) >> 14));
         b0 = clamp17(b0 + ((f * hh) >> 14));
@@ -975,7 +975,7 @@ static int rv_mode = -1;
 
 static void space_render(s32 *w, int feed)
 {
-    int amt = dcosm.knob[K_SPC], mode = (dcosm.shift[S_VERB] * 4) >> 7, i, k;
+    int amt = dswarm.knob[K_SPC], mode = (dswarm.shift[S_VERB] * 4) >> 7, i, k;
     s16 *R = DC_REV;
     s32 fbk, lpc, a;
     if (mode != rv_mode) {
@@ -1026,7 +1026,7 @@ static void space_render(s32 *w, int feed)
 static u8 cur_engine = 0xff, cur_var, cur_rev;
 static u32 t_prev;
 
-void dcosm_dsp_reset(void)
+void dswarm_dsp_reset(void)
 {
     int k;
     for (k = 0; k < MAXH; k++)
@@ -1035,8 +1035,8 @@ void dcosm_dsp_reset(void)
     ons_n = 0;
     env_slow = 0;
     refr = 0;
-    haze_acc = 0;
-    haze_ptr = 0;
+    mist_acc = 0;
+    mist_ptr = 0;
     duck = 0;
     dly_fill = 0;
     cur_engine = 0xff;
@@ -1045,14 +1045,14 @@ void dcosm_dsp_reset(void)
         rv_lp[k] = 0;
 }
 
-void dcosm_render(int32_t *out, const int32_t *in)
+void dswarm_render(int32_t *out, const int32_t *in)
 {
     static s32 x[2 * N], w[2 * N];
     u32 t0 = DTCN0;
-    s32 g = dc_in_gain[dcosm.shift[S_GAIN]], dg, wg, pkl = 0, pkr = 0;
-    int i, tick, onset, pre = dcosm.cfg[G_PRE], byp = dcosm.bypass, e = dcosm.engine, mono = dcosm.cfg[G_MONO];
+    s32 g = dc_in_gain[dswarm.shift[S_GAIN]], dg, wg, pkl = 0, pkr = 0;
+    int i, tick, onset, pre = dswarm.cfg[G_PRE], byp = dswarm.bypass, e = dswarm.engine, mono = dswarm.cfg[G_MONO];
 
-    act = dcosm.knob[K_ACT], rep = dcosm.knob[K_REP], shp = dcosm.knob[K_SHP] >> 5, var = dcosm.var;
+    act = dswarm.knob[K_ACT], rep = dswarm.knob[K_REP], shp = dswarm.knob[K_SHP] >> 5, var = dswarm.var;
 
     /* the input: gain, mono, its peak */
     for (i = 0; i < N; i++) {
@@ -1068,13 +1068,13 @@ void dcosm_render(int32_t *out, const int32_t *in)
     if (pkl > 32767) pkl = 32767;
     if (pkr > 32767) pkr = 32767;
     peak = pkl > pkr ? pkl : pkr;
-    if (pkl > dcosm.meter[0])
-        dcosm.meter[0] = (u16)pkl;
-    if (pkr > dcosm.meter[1])
-        dcosm.meter[1] = (u16)pkr;
+    if (pkl > dswarm.meter[0])
+        dswarm.meter[0] = (u16)pkl;
+    if (pkr > dswarm.meter[1])
+        dswarm.meter[1] = (u16)pkr;
 
     /* the engine's change, reversing */
-    if (e != cur_engine || dcosm.var != cur_var) {
+    if (e != cur_engine || dswarm.var != cur_var) {
         for (i = 0; i < MAXH; i++)
             if (hd[i].on && hd[i].loop)
                 hd[i].dying = 1;
@@ -1085,12 +1085,12 @@ void dcosm_render(int32_t *out, const int32_t *in)
         if (e == E_PATTERN && cur_engine != E_PATTERN)
             dly_fill = 0;
         cur_engine = (u8)e;
-        cur_var = dcosm.var;
+        cur_var = dswarm.var;
     }
-    if (dcosm.reverse != cur_rev) {
+    if (dswarm.reverse != cur_rev) {
         for (i = 0; i < MAXH; i++)
             hd[i].inc = -hd[i].inc;
-        cur_rev = dcosm.reverse;
+        cur_rev = dswarm.reverse;
     }
 
     loop_command();
@@ -1099,7 +1099,7 @@ void dcosm_render(int32_t *out, const int32_t *in)
 
     /* the looper's playback first: pre-FX it feeds the history */
     loop_play();
-    if (!dcosm.hold) {
+    if (!dswarm.hold) {
         s16 *p = DC_HIST + 2 * hw;
         for (i = 0; i < N; i++) {
             p[2 * i] = (s16)sat16(x[2 * i] + (pre ? lp[2 * i] : 0));
@@ -1111,22 +1111,22 @@ void dcosm_render(int32_t *out, const int32_t *in)
     /* the engine */
     for (i = 0; i < 2 * N; i++)
         w[i] = 0;
-    if (!byp && !dcosm.cfg[G_ONLY]) {
+    if (!byp && !dswarm.cfg[G_ONLY]) {
         switch (e) {
-        case E_MOSAIC: eng_mosaic(tick); break;
+        case E_SHARDS: eng_shards(tick); break;
         case E_SEQ: eng_seq(tick); break;
         case E_GLIDE: eng_glide(tick); break;
-        case E_HAZE: eng_haze(); break;
-        case E_TUNNEL: eng_tunnel(tick, onset); break;
-        case E_STRUM: eng_strum(tick, onset); break;
-        case E_BLOCKS: eng_blocks(tick, onset); break;
-        case E_INTERRUPT: eng_interrupt(tick); break;
+        case E_MIST: eng_mist(); break;
+        case E_DRONE: eng_drone(tick, onset); break;
+        case E_RAKE: eng_rake(tick, onset); break;
+        case E_CHOPS: eng_chops(tick, onset); break;
+        case E_STUTTER: eng_stutter(tick); break;
         case E_ARP: eng_arp(tick); break;
         case E_PATTERN: eng_pattern(); break;
         case E_WARP: eng_warp(tick); break;
         }
     }
-    if (!dcosm.cfg[G_ONLY]) {
+    if (!dswarm.cfg[G_ONLY]) {
         heads_render(w);
         if (e == E_PATTERN)
             taps_render(w, x, !byp);
@@ -1134,7 +1134,7 @@ void dcosm_render(int32_t *out, const int32_t *in)
 
     /* the looper: it records what the engine made (post-FX) or the input (pre-FX), and plays into the
      * effects' path (post) or beside the input (pre) */
-    if (dcosm.lstate == L_REC || dcosm.lstate == L_DUB) {
+    if (dswarm.lstate == L_REC || dswarm.lstate == L_DUB) {
         static s32 src[2 * N];
         for (i = 0; i < 2 * N; i++)
             src[i] = pre ? x[i] : x[i] + w[i];
@@ -1148,15 +1148,15 @@ void dcosm_render(int32_t *out, const int32_t *in)
     filter_render(w);
     space_render(w, !byp);
 
-    /* Mix: the dry input at 20 bits against the effects; INTERRUPT ducks the dry. With INPUT MONO the left
+    /* Mix: the dry input at 20 bits against the effects; STUTTER ducks the dry. With INPUT MONO the left
      * input is the dry on both sides, as it is the effects' input */
-    dg = dc_mix_dry[dcosm.knob[K_MIX]];
-    wg = (dc_mix_wet[dcosm.knob[K_MIX]] * dc_level[dcosm.shift[S_FXVOL]]) >> 14;
+    dg = dc_mix_dry[dswarm.knob[K_MIX]];
+    wg = (dc_mix_wet[dswarm.knob[K_MIX]] * dc_level[dswarm.shift[S_FXVOL]]) >> 14;
     if (byp)
         dg = 2048;
     if (duck > 0) {
-        if (e == E_INTERRUPT && !byp)
-            dg = (dg * (127 - dcosm.knob[K_MIX])) / 127;
+        if (e == E_STUTTER && !byp)
+            dg = (dg * (127 - dswarm.knob[K_MIX])) / 127;
         duck -= N;
     }
     for (i = 0; i < 2 * N; i++) {
@@ -1175,11 +1175,11 @@ void dcosm_render(int32_t *out, const int32_t *in)
         static u32 slow;
         u32 t1 = DTCN0, per = t0 - t_prev;
         if (per)
-            dcosm.cpu = (u16)((t1 - t0) * 1000u / per);
+            dswarm.cpu = (u16)((t1 - t0) * 1000u / per);
         t_prev = t0;
-        if (dcosm.cpu > 450 && hcap > 4)        /* over budget: fewer new grains, at once */
+        if (dswarm.cpu > 450 && hcap > 4)        /* over budget: fewer new grains, at once */
             hcap--;
-        else if (dcosm.cpu < 300 && hcap < MAXH && (++slow & 63) == 0)
+        else if (dswarm.cpu < 300 && hcap < MAXH && (++slow & 63) == 0)
             hcap++;                             /* under it: one more, slowly */
     }
 }

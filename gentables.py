@@ -1,4 +1,4 @@
-"""DigiCosm's constant tables (tables.h): windows, sine, exp2, filter coefficients, gain curves.
+"""DigiSwarm's constant tables (tables.h): windows, sine, exp2, filter coefficients, gain curves.
 python3 gentables.py > tables.h"""
 import math
 
@@ -61,5 +61,5 @@ arr('int32_t', 'dc_in_gain', [0] + [int(round(4096 * 10 ** ((k - 64) * 0.3 / 20)
 arr('int16_t', 'dc_level', [int(round(16384 * (k / 100.0) ** 2)) for k in range(128)], 16)
 
 print('/* SPDX-License-Identifier: GPL-2.0-or-later */')
-print('/* DigiCosm\'s constant tables, from gentables.py: do not edit. */')
+print('/* DigiSwarm\'s constant tables, from gentables.py: do not edit. */')
 print('\n'.join(out))

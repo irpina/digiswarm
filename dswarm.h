@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/* DigiCosm: a Microcosm-style effects engine for the Digitone mk1's audio inputs, on core-dn1 3.2's
+/* DigiSwarm: an effects engine for the Digitone mk1's audio inputs, on core-dn1 3.2's
  * exclusive audio (core_audio). Shared by dsp.c (the render, interrupt level) and ui.c (the UI task). */
-#ifndef DCOSM_H
-#define DCOSM_H
+#ifndef DSWARM_H
+#define DSWARM_H
 
 #include <stdint.h>
 #include "digitone-mk1/core3.h"
@@ -14,7 +14,7 @@ typedef uint16_t u16;
 typedef uint8_t u8;
 
 /* The buffers: the region mod.json claims in the profile's bulk area. The OS never clears it, so the UI
- * clears what the render reads before it has written it (dcosm_clear_step). */
+ * clears what the render reads before it has written it (dswarm_clear_step). */
 #define DC_BULK         0x44000000u
 #define DC_BULK_END     0x45B00000u
 #define DC_HIST_FR      (1u << 19)                      /* the input's history: 10.9 s, stereo s16 */
@@ -32,7 +32,7 @@ typedef uint8_t u8;
 #define DC_LOOPB        ((s16 *)(DC_BULK + 0x01000000u))
 #define DC_CLEAR_END    (DC_BULK + 0x00344000u)         /* history, delay, reverb, modulation */
 
-enum { E_MOSAIC, E_SEQ, E_GLIDE, E_HAZE, E_TUNNEL, E_STRUM, E_BLOCKS, E_INTERRUPT, E_ARP, E_PATTERN,
+enum { E_SHARDS, E_SEQ, E_GLIDE, E_MIST, E_DRONE, E_RAKE, E_CHOPS, E_STUTTER, E_ARP, E_PATTERN,
        E_WARP, E_COUNT };
 enum { K_ACT, K_REP, K_SHP, K_FLT, K_MIX, K_TIME, K_SPC, K_LOOP };          /* the knobs, A-H */
 enum { S_GAIN, S_MDEP, S_MRATE, S_RESO, S_FXVOL, S_LSPEED, S_VERB, S_FADE }; /* FUNC + A-H */
@@ -55,11 +55,11 @@ struct dc_state {
     volatile u16 cpu;                   /* the render's share of a block, per mille */
     volatile u16 heads;                 /* heads playing */
 };
-extern struct dc_state dcosm;
-extern struct core_audio_owner dcosm_owner;
+extern struct dc_state dswarm;
+extern struct core_audio_owner dswarm_owner;
 
-void dcosm_render(int32_t *out, const int32_t *in);
-void dcosm_dsp_reset(void);
-extern const char *const dcosm_engine_names[E_COUNT];
+void dswarm_render(int32_t *out, const int32_t *in);
+void dswarm_dsp_reset(void);
+extern const char *const dswarm_engine_names[E_COUNT];
 
 #endif

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/* DigiCosm's constant tables, from gentables.py: do not edit. */
+/* DigiSwarm's constant tables, from gentables.py: do not edit. */
 static const int16_t dc_win[1024] = {
     1600, 4800, 8000, 11200, 14400, 17599, 20799, 23999, 27199, 30399, 32767, 32767, 32767, 32767, 32767, 32767,
     32767, 32767, 32767, 32767, 32767, 32767, 32767, 32767, 32767, 32767, 32767, 32767, 32767, 32767, 32767, 32767,
